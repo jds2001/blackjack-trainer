@@ -5,8 +5,8 @@ import { HandView } from "../components/HandView";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { StatsPanel } from "../components/StatsPanel";
 import { StrategyTable } from "../components/StrategyTable";
-import { createInitialRound } from "../game/engine";
-import { defaultRules, type TableRules } from "../game/rules";
+import { applyPlayerAction, createInitialRound } from "../game/engine";
+import { defaultRules, type PlayerAction, type TableRules } from "../game/rules";
 import { createEmptyStats } from "../persistence/stats";
 
 type View = "practice" | "strategy" | "stats" | "settings";
@@ -14,8 +14,21 @@ type View = "practice" | "strategy" | "stats" | "settings";
 export function App() {
   const [activeView, setActiveView] = useState<View>("practice");
   const [rules, setRules] = useState<TableRules>(defaultRules);
-  const [round] = useState(() => createInitialRound(defaultRules));
+  const [round, setRound] = useState(() => createInitialRound(defaultRules));
   const stats = useMemo(() => createEmptyStats(rules), [rules]);
+
+  function handleRulesChange(nextRules: TableRules) {
+    setRules(nextRules);
+    setRound(createInitialRound(nextRules));
+  }
+
+  function handleAction(action: PlayerAction) {
+    setRound((currentRound) => applyPlayerAction(currentRound, action, rules));
+  }
+
+  function dealNextRound() {
+    setRound(createInitialRound(rules));
+  }
 
   return (
     <main className="app-shell">
@@ -46,7 +59,7 @@ export function App() {
             <div className="table-header">
               <div>
                 <p className="label">Dealer</p>
-                <HandView hand={round.dealerHand} revealHoleCard={false} />
+                <HandView hand={round.dealerHand} revealHoleCard={round.status === "settled"} />
               </div>
               <button className="icon-button" aria-label="Audio enabled">
                 <Volume2 size={18} />
@@ -58,7 +71,15 @@ export function App() {
               <HandView hand={round.playerHands[0].cards} />
             </div>
 
-            <ActionButtons legalActions={round.playerHands[0].legalActions} onAction={() => undefined} />
+            <p className="round-message">{round.message}</p>
+
+            {round.status === "playing" ? (
+              <ActionButtons legalActions={round.playerHands[0].legalActions} onAction={handleAction} />
+            ) : (
+              <button className="primary-button" onClick={dealNextRound}>
+                Deal next hand
+              </button>
+            )}
           </div>
 
           <aside className="side-panel">
@@ -79,7 +100,7 @@ export function App() {
 
       {activeView === "strategy" && <StrategyTable rules={rules} />}
       {activeView === "stats" && <StatsPanel stats={stats} />}
-      {activeView === "settings" && <SettingsPanel rules={rules} onChange={setRules} />}
+      {activeView === "settings" && <SettingsPanel rules={rules} onChange={handleRulesChange} />}
     </main>
   );
 }

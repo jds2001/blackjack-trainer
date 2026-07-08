@@ -80,7 +80,8 @@ h2 {
 
 .nav-tabs button,
 .action-row button,
-.icon-button {
+.icon-button,
+.primary-button {
   align-items: center;
   background: #e2eadf;
   color: #172019;
@@ -91,7 +92,8 @@ h2 {
 }
 
 .nav-tabs button.active,
-.action-row button:not(:disabled):hover {
+.action-row button:not(:disabled):hover,
+.primary-button {
   background: #174a2a;
   color: #fff;
 }
@@ -158,6 +160,12 @@ h2 {
 
 .hand-total {
   font-weight: 800;
+}
+
+.round-message {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin: 0;
 }
 
 .side-panel,
