@@ -124,6 +124,48 @@ h2 {
   gap: 16px;
 }
 
+.table-header-controls {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+
+.bankroll-display {
+  margin: 0;
+  text-align: right;
+}
+
+.bankroll-value {
+  display: block;
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.deal-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.bet-control {
+  align-items: center;
+  color: #fff;
+  display: flex;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.bet-control input {
+  background: #fff;
+  border: 1px solid #d7ded4;
+  border-radius: 6px;
+  color: #111;
+  font-weight: 700;
+  padding: 8px;
+  width: 90px;
+}
+
 .hand {
   display: grid;
   gap: 10px;

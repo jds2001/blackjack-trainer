@@ -34,6 +34,11 @@ export function App() {
   });
   const [feedback, setFeedback] = useState<ActionEvaluation | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [betAmount, setBetAmount] = useState(defaultRules.defaultBet);
+
+  function handleBetChange(value: number) {
+    setBetAmount(clampBet(value, stats.bankroll));
+  }
 
   function updateStats(updater: (current: SessionStats) => SessionStats) {
     setStats((current) => {
@@ -47,7 +52,7 @@ export function App() {
     setRules(nextRules);
     setStats(loadStats(nextRules));
     setFeedback(null);
-    const newRound = createInitialRound(nextRules);
+    const newRound = createInitialRound({ ...nextRules, defaultBet: betAmount });
     setRound(newRound);
     if (newRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, newRound));
@@ -90,7 +95,7 @@ export function App() {
   }
 
   function dealNextRound() {
-    const newRound = createInitialRound(rules, nextShoeFor(round, rules));
+    const newRound = createInitialRound({ ...rules, defaultBet: betAmount }, nextShoeFor(round, rules));
     setRound(newRound);
     setFeedback(null);
     if (newRound.status === "settled") {
@@ -132,14 +137,20 @@ export function App() {
                 <p className="label">Dealer</p>
                 <HandView hand={round.dealerHand} revealHoleCard={round.status === "settled"} />
               </div>
-              <button
-                className="icon-button"
-                aria-label={audioEnabled ? "Disable audio" : "Enable audio"}
-                aria-pressed={audioEnabled}
-                onClick={() => setAudioEnabled((enabled) => !enabled)}
-              >
-                {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-              </button>
+              <div className="table-header-controls">
+                <p className="bankroll-display">
+                  <span className="label">Bankroll</span>
+                  <span className="bankroll-value">${stats.bankroll}</span>
+                </p>
+                <button
+                  className="icon-button"
+                  aria-label={audioEnabled ? "Disable audio" : "Enable audio"}
+                  aria-pressed={audioEnabled}
+                  onClick={() => setAudioEnabled((enabled) => !enabled)}
+                >
+                  {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+                </button>
+              </div>
             </div>
 
             <div className="player-hands">
@@ -171,9 +182,21 @@ export function App() {
             {round.status === "playing" ? (
               <ActionButtons legalActions={round.playerHands[round.activeHandIndex].legalActions} onAction={handleAction} />
             ) : (
-              <button className="primary-button" onClick={dealNextRound}>
-                Deal next hand
-              </button>
+              <div className="deal-row">
+                <label className="bet-control">
+                  Next bet
+                  <input
+                    type="number"
+                    min={1}
+                    max={stats.bankroll}
+                    value={betAmount}
+                    onChange={(event) => handleBetChange(Number(event.target.value))}
+                  />
+                </label>
+                <button className="primary-button" onClick={dealNextRound}>
+                  Deal next hand
+                </button>
+              </div>
             )}
           </div>
 
@@ -200,6 +223,12 @@ export function App() {
       {activeView === "settings" && <SettingsPanel rules={rules} onChange={handleRulesChange} />}
     </main>
   );
+}
+
+function clampBet(value: number, bankroll: number): number {
+  if (Number.isNaN(value)) return 1;
+  const max = Math.max(bankroll, 1);
+  return Math.min(Math.max(Math.round(value), 1), max);
 }
 
 function announceHandTotal(cards: Card[]): string {
