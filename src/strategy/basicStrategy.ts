@@ -6,7 +6,7 @@ export function getBasicStrategy(input: StrategyInput, rules: TableRules): Strat
     return pairStrategy(input);
   }
 
-  if (rules.surrenderAllowed && input.canSurrender) {
+  if (!input.isSoft && rules.surrenderAllowed && input.canSurrender) {
     const surrender = surrenderStrategy(input, rules);
     if (surrender) return surrender;
   }
@@ -15,17 +15,17 @@ export function getBasicStrategy(input: StrategyInput, rules: TableRules): Strat
     return softTotalStrategy(input);
   }
 
-  return hardTotalStrategy(input);
+  return hardTotalStrategy(input, rules);
 }
 
-function hardTotalStrategy(input: StrategyInput): StrategyCode {
+function hardTotalStrategy(input: StrategyInput, rules: TableRules): StrategyCode {
   const upcard = upcardValue(input.dealerUpcard);
   const total = input.playerTotal;
 
   if (total >= 17) return "S";
   if (total >= 13 && upcard >= 2 && upcard <= 6) return "S";
   if (total === 12 && upcard >= 4 && upcard <= 6) return "S";
-  if (total === 11) return "D";
+  if (total === 11) return upcard === 11 && !rules.dealerHitsSoft17 ? "H" : "D";
   if (total === 10 && upcard <= 9) return "D";
   if (total === 9 && upcard >= 3 && upcard <= 6) return "D";
   return "H";

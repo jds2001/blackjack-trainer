@@ -24,4 +24,14 @@ describe("hand totals", () => {
     expect(bestHandValue(hand)).toBe(17);
     expect(isSoftHand(hand)).toBe(false);
   });
+
+  it("is not soft when there is no ace, even with a low total", () => {
+    const hand: Card[] = [
+      { rank: "3", suit: "hearts" },
+      { rank: "7", suit: "spades" }
+    ];
+
+    expect(bestHandValue(hand)).toBe(10);
+    expect(isSoftHand(hand)).toBe(false);
+  });
 });

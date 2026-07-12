@@ -1,4 +1,5 @@
 import type { Card } from "../game/cards";
+import { cardImageUrl } from "./cardImages";
 
 type CardViewProps = {
   card?: Card;
@@ -10,21 +11,11 @@ export function CardView({ card, hidden = false }: CardViewProps) {
     return <span className="playing-card back" aria-label="Hidden card" />;
   }
 
-  const isRed = card.suit === "hearts" || card.suit === "diamonds";
-
   return (
-    <span className={isRed ? "playing-card red" : "playing-card"}>
-      <span>{card.rank}</span>
-      <span>{suitSymbol(card.suit)}</span>
-    </span>
+    <img
+      className="playing-card"
+      src={cardImageUrl(card)}
+      alt={`${card.rank} of ${card.suit}`}
+    />
   );
-}
-
-function suitSymbol(suit: Card["suit"]) {
-  return {
-    clubs: "C",
-    diamonds: "D",
-    hearts: "H",
-    spades: "S"
-  }[suit];
 }

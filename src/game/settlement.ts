@@ -3,11 +3,14 @@ import { bestHandValue, isBlackjack, isBust } from "./hand";
 
 export type Settlement = "win" | "loss" | "push" | "blackjack";
 
-export function settleHand(playerHand: Card[], dealerHand: Card[]): Settlement {
+export function settleHand(playerHand: Card[], dealerHand: Card[], playerIsSplitHand = false): Settlement {
   if (isBust(playerHand)) return "loss";
   if (isBust(dealerHand)) return "win";
-  if (isBlackjack(playerHand) && !isBlackjack(dealerHand)) return "blackjack";
-  if (!isBlackjack(playerHand) && isBlackjack(dealerHand)) return "loss";
+
+  const playerHasBlackjack = !playerIsSplitHand && isBlackjack(playerHand);
+  const dealerHasBlackjack = isBlackjack(dealerHand);
+  if (playerHasBlackjack && !dealerHasBlackjack) return "blackjack";
+  if (!playerHasBlackjack && dealerHasBlackjack) return "loss";
 
   const playerTotal = bestHandValue(playerHand);
   const dealerTotal = bestHandValue(dealerHand);

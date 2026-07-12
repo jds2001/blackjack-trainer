@@ -38,6 +38,15 @@ export function SettingsPanel({ rules, onChange }: SettingsPanelProps) {
         <label className="toggle-row">
           <input
             type="checkbox"
+            checked={rules.dealerPeeksForBlackjack}
+            onChange={(event) => onChange({ ...rules, dealerPeeksForBlackjack: event.target.checked })}
+          />
+          Dealer peeks for blackjack
+        </label>
+
+        <label className="toggle-row">
+          <input
+            type="checkbox"
             checked={rules.surrenderAllowed}
             onChange={(event) => onChange({ ...rules, surrenderAllowed: event.target.checked })}
           />

@@ -1,8 +1,19 @@
 import type { Card } from "./cards";
-import { bestHandValue, canSplit, isBust, isSoftHand } from "./hand";
+import { bestHandValue, canSplit, isBlackjack, isBust, isSoftHand } from "./hand";
 import type { PlayerAction, TableRules } from "./rules";
 import { settleHand, type Settlement } from "./settlement";
-import { createShoe, drawCard, type Shoe } from "./shoe";
+import { createShoe, drawCard, shouldReshuffle, type Shoe } from "./shoe";
+import { getBasicStrategy } from "../strategy/basicStrategy";
+import { rankToDealerUpcard, strategyCodeToAction, type StrategyInput } from "../strategy/strategyTypes";
+
+export type HandResult = Settlement | "surrender";
+
+export type ActionEvaluation = {
+  handIndex: number;
+  playerAction: PlayerAction;
+  recommendedAction: PlayerAction;
+  wasCorrect: boolean;
+};
 
 export type PlayerHandState = {
   cards: Card[];
@@ -10,6 +21,8 @@ export type PlayerHandState = {
   legalActions: PlayerAction[];
   hasActed: boolean;
   isSurrendered: boolean;
+  isSplitHand: boolean;
+  result?: HandResult;
 };
 
 export type RoundState = {
@@ -18,16 +31,20 @@ export type RoundState = {
   playerHands: PlayerHandState[];
   activeHandIndex: number;
   status: "playing" | "settled";
-  result?: Settlement | "surrender";
+  result?: HandResult;
   message: string;
 };
 
-export function createInitialRound(rules: TableRules): RoundState {
-  const shoe = createShoe(rules.deckCount);
+export function nextShoeFor(round: RoundState, rules: TableRules): Shoe {
+  return shouldReshuffle(round.shoe, rules.deckCount) ? createShoe(rules.deckCount) : round.shoe;
+}
+
+export function createInitialRound(rules: TableRules, previousShoe?: Shoe): RoundState {
+  const shoe = cloneShoe(previousShoe ?? createShoe(rules.deckCount));
   const playerCards = [drawCard(shoe), drawCard(shoe)];
   const dealerHand = [drawCard(shoe), drawCard(shoe)];
 
-  return {
+  const round: RoundState = {
     shoe,
     dealerHand,
     activeHandIndex: 0,
@@ -35,22 +52,98 @@ export function createInitialRound(rules: TableRules): RoundState {
       {
         cards: playerCards,
         bet: rules.defaultBet,
-        legalActions: legalActionsForHand(playerCards, rules, false),
+        legalActions: legalActionsForHand(playerCards, rules, false, 1),
         hasActed: false,
-        isSurrendered: false
+        isSurrendered: false,
+        isSplitHand: false
       }
     ],
     status: "playing",
     message: "Choose the best play."
   };
+
+  if (rules.dealerPeeksForBlackjack && isBlackjack(dealerHand)) {
+    const playerHands = replaceActiveHand(round, {
+      ...round.playerHands[0],
+      legalActions: [],
+      hasActed: true
+    });
+    return settleRound({ ...round, playerHands }, rules, "Dealer peeks and has blackjack.");
+  }
+
+  if (isBlackjack(playerCards)) {
+    const playerHands = replaceActiveHand(round, {
+      ...round.playerHands[0],
+      legalActions: [],
+      hasActed: true
+    });
+    return settleRound({ ...round, playerHands }, rules, "Player has blackjack.");
+  }
+
+  return round;
 }
 
-export function legalActionsForHand(hand: Card[], rules: TableRules, isSplitHand: boolean): PlayerAction[] {
+export function legalActionsForHand(
+  hand: Card[],
+  rules: TableRules,
+  isSplitHand: boolean,
+  handCount: number
+): PlayerAction[] {
   const actions: PlayerAction[] = ["hit", "stand"];
-  if (hand.length === 2) actions.push("double");
-  if (rules.surrenderAllowed && hand.length === 2 && !isSplitHand) actions.push("surrender");
-  if (canSplit(hand)) actions.push("split");
+
+  if (hand.length === 2 && (!isSplitHand || rules.doubleAfterSplit)) {
+    actions.push("double");
+  }
+
+  if (rules.surrenderAllowed && hand.length === 2 && !isSplitHand) {
+    actions.push("surrender");
+  }
+
+  if (canSplit(hand) && handCount < rules.maxSplitHands) {
+    actions.push("split");
+  }
+
   return actions;
+}
+
+export function evaluateAction(round: RoundState, action: PlayerAction, rules: TableRules): ActionEvaluation | null {
+  if (round.status === "settled") return null;
+
+  const activeHand = round.playerHands[round.activeHandIndex];
+  if (!activeHand.legalActions.includes(action)) return null;
+
+  const input = buildStrategyInput(activeHand, round.dealerHand[0]);
+  const code = getBasicStrategy(input, rules);
+  const recommendedAction = strategyCodeToAction(code, input);
+
+  return {
+    handIndex: round.activeHandIndex,
+    playerAction: action,
+    recommendedAction,
+    wasCorrect: recommendedAction === action
+  };
+}
+
+function buildStrategyInput(hand: PlayerHandState, dealerUpcard: Card): StrategyInput {
+  const isPair = hand.cards.length === 2 && canSplit(hand.cards);
+  return {
+    playerTotal: bestHandValue(hand.cards),
+    isSoft: isSoftHand(hand.cards),
+    isPair,
+    pairRank: isPair ? hand.cards[0].rank : undefined,
+    dealerUpcard: rankToDealerUpcard(dealerUpcard.rank),
+    canDouble: hand.legalActions.includes("double"),
+    canSplit: hand.legalActions.includes("split"),
+    canSurrender: hand.legalActions.includes("surrender")
+  };
+}
+
+export function payoutForResult(result: HandResult, bet: number): number {
+  if (result === "win") return bet;
+  if (result === "loss") return -bet;
+  if (result === "push") return 0;
+  if (result === "blackjack") return Math.round(bet * 1.5);
+  return -Math.round(bet / 2);
 }
 
 export function applyPlayerAction(round: RoundState, action: PlayerAction, rules: TableRules): RoundState {
@@ -64,21 +157,7 @@ export function applyPlayerAction(round: RoundState, action: PlayerAction, rules
   }
 
   if (action === "double") {
-    const shoe = cloneShoe(round.shoe);
-    const cards = [...activeHand.cards, drawCard(shoe)];
-    const playerHands = replaceActiveHand(round, {
-      ...activeHand,
-      cards,
-      bet: activeHand.bet * 2,
-      legalActions: [],
-      hasActed: true
-    });
-
-    if (isBust(cards)) {
-      return settleRound({ ...round, shoe, playerHands }, rules, "Player busts after doubling.");
-    }
-
-    return settleRound({ ...round, shoe, playerHands }, rules, "Player doubles.");
+    return doubleActiveHand(round, rules);
   }
 
   if (action === "stand") {
@@ -87,7 +166,7 @@ export function applyPlayerAction(round: RoundState, action: PlayerAction, rules
       legalActions: [],
       hasActed: true
     });
-    return settleRound({ ...round, playerHands }, rules, "Player stands.");
+    return advanceAfterCompletedHand({ ...round, playerHands }, rules, "Player stands.");
   }
 
   if (action === "surrender") {
@@ -95,36 +174,30 @@ export function applyPlayerAction(round: RoundState, action: PlayerAction, rules
       ...activeHand,
       legalActions: [],
       hasActed: true,
-      isSurrendered: true
+      isSurrendered: true,
+      result: "surrender"
     });
-    return {
-      ...round,
-      playerHands,
-      status: "settled",
-      result: "surrender",
-      message: "Player surrenders."
-    };
+    return advanceAfterCompletedHand({ ...round, playerHands }, rules, "Player surrenders.");
   }
 
-  return {
-    ...round,
-    message: "Split support is scaffolded but not wired yet."
-  };
+  return splitActiveHand(round, rules);
 }
 
 function hitActiveHand(round: RoundState, rules: TableRules): RoundState {
   const shoe = cloneShoe(round.shoe);
   const activeHand = round.playerHands[round.activeHandIndex];
   const cards = [...activeHand.cards, drawCard(shoe)];
+  const isHandBust = isBust(cards);
   const playerHands = replaceActiveHand(round, {
     ...activeHand,
     cards,
-    legalActions: isBust(cards) ? [] : legalActionsForHand(cards, rules, false),
-    hasActed: true
+    legalActions: isHandBust ? [] : legalActionsForHand(cards, rules, activeHand.isSplitHand, round.playerHands.length),
+    hasActed: true,
+    result: isHandBust ? "loss" : undefined
   });
 
-  if (isBust(cards)) {
-    return settleRound({ ...round, shoe, playerHands }, rules, "Player busts.");
+  if (isHandBust) {
+    return advanceAfterCompletedHand({ ...round, shoe, playerHands }, rules, "Player busts.");
   }
 
   return {
@@ -135,18 +208,108 @@ function hitActiveHand(round: RoundState, rules: TableRules): RoundState {
   };
 }
 
+function doubleActiveHand(round: RoundState, rules: TableRules): RoundState {
+  const shoe = cloneShoe(round.shoe);
+  const activeHand = round.playerHands[round.activeHandIndex];
+  const cards = [...activeHand.cards, drawCard(shoe)];
+  const isHandBust = isBust(cards);
+  const playerHands = replaceActiveHand(round, {
+    ...activeHand,
+    cards,
+    bet: activeHand.bet * 2,
+    legalActions: [],
+    hasActed: true,
+    result: isHandBust ? "loss" : undefined
+  });
+
+  return advanceAfterCompletedHand(
+    { ...round, shoe, playerHands },
+    rules,
+    isHandBust ? "Player busts after doubling." : "Player doubles."
+  );
+}
+
+function splitActiveHand(round: RoundState, rules: TableRules): RoundState {
+  const shoe = cloneShoe(round.shoe);
+  const activeHand = round.playerHands[round.activeHandIndex];
+  const [firstCard, secondCard] = activeHand.cards;
+  const isSplittingAces = firstCard.rank === "A";
+  const firstHandCards = [firstCard, drawCard(shoe)];
+  const secondHandCards = [secondCard, drawCard(shoe)];
+  const newHandCount = round.playerHands.length + 1;
+
+  const firstHand: PlayerHandState = {
+    ...activeHand,
+    cards: firstHandCards,
+    legalActions: isSplittingAces ? [] : legalActionsForHand(firstHandCards, rules, true, newHandCount),
+    hasActed: isSplittingAces,
+    isSurrendered: false,
+    isSplitHand: true,
+    result: undefined
+  };
+
+  const secondHand: PlayerHandState = {
+    cards: secondHandCards,
+    bet: activeHand.bet,
+    legalActions: isSplittingAces ? [] : legalActionsForHand(secondHandCards, rules, true, newHandCount),
+    hasActed: isSplittingAces,
+    isSurrendered: false,
+    isSplitHand: true
+  };
+
+  const splitRound: RoundState = {
+    ...round,
+    shoe,
+    playerHands: [
+      ...round.playerHands.slice(0, round.activeHandIndex),
+      firstHand,
+      secondHand,
+      ...round.playerHands.slice(round.activeHandIndex + 1)
+    ],
+    message: `Hand ${round.activeHandIndex + 1} split. Play the first split hand.`
+  };
+
+  if (isSplittingAces) {
+    return advanceAfterCompletedHand(splitRound, rules, "Split aces receive one card each.");
+  }
+
+  return splitRound;
+}
+
+function advanceAfterCompletedHand(round: RoundState, rules: TableRules, message: string): RoundState {
+  const nextHandIndex = round.playerHands.findIndex((hand, index) => index > round.activeHandIndex && !hand.hasActed);
+
+  if (nextHandIndex !== -1) {
+    return {
+      ...round,
+      activeHandIndex: nextHandIndex,
+      message: `${message} Play hand ${nextHandIndex + 1}.`
+    };
+  }
+
+  return settleRound(round, rules, message);
+}
+
 function settleRound(round: RoundState, rules: TableRules, message: string): RoundState {
   const shoe = cloneShoe(round.shoe);
-  const dealerHand = playDealerHand([...round.dealerHand], shoe, rules);
-  const result = settleHand(round.playerHands[round.activeHandIndex].cards, dealerHand);
+  const dealerMustPlay = round.playerHands.some((hand) => !hand.isSurrendered && !isBust(hand.cards));
+  const dealerHand = dealerMustPlay ? playDealerHand([...round.dealerHand], shoe, rules) : round.dealerHand;
+  const playerHands = round.playerHands.map((hand) => ({
+    ...hand,
+    legalActions: [],
+    hasActed: true,
+    result: hand.result ?? (hand.isSurrendered ? "surrender" : settleHand(hand.cards, dealerHand, hand.isSplitHand))
+  }));
+  const summary = playerHands.map((hand, index) => `Hand ${index + 1}: ${resultMessage(hand.result!)}`).join(" ");
 
   return {
     ...round,
     shoe,
     dealerHand,
+    playerHands,
     status: "settled",
-    result,
-    message: `${message} ${resultMessage(result)}`
+    result: playerHands[round.activeHandIndex]?.result,
+    message: `${message} ${summary}`
   };
 }
 
@@ -163,12 +326,13 @@ function shouldDealerDraw(dealerHand: Card[], rules: TableRules) {
   return total === 17 && rules.dealerHitsSoft17 && isSoftHand(dealerHand);
 }
 
-function resultMessage(result: Settlement) {
+function resultMessage(result: HandResult) {
   return {
-    blackjack: "Blackjack pays.",
-    loss: "Dealer wins.",
-    push: "Push.",
-    win: "Player wins."
+    blackjack: "blackjack pays",
+    loss: "dealer wins",
+    push: "push",
+    surrender: "surrender",
+    win: "player wins"
   }[result];
 }
 

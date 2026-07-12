@@ -1,13 +1,24 @@
-import { BookOpen, ChartNoAxesColumn, Settings, Volume2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { BookOpen, ChartNoAxesColumn, Settings, Volume2, VolumeX } from "lucide-react";
+import { useState } from "react";
 import { ActionButtons } from "../components/ActionButtons";
+import { actionLabels } from "../components/actionLabels";
 import { HandView } from "../components/HandView";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { StatsPanel } from "../components/StatsPanel";
 import { StrategyTable } from "../components/StrategyTable";
-import { applyPlayerAction, createInitialRound } from "../game/engine";
+import {
+  applyPlayerAction,
+  createInitialRound,
+  evaluateAction,
+  nextShoeFor,
+  payoutForResult,
+  type ActionEvaluation,
+  type HandResult,
+  type RoundState
+} from "../game/engine";
 import { defaultRules, type PlayerAction, type TableRules } from "../game/rules";
-import { createEmptyStats } from "../persistence/stats";
+import { loadStats, recordDecision, recordSettledRound, saveStats, type SessionStats } from "../persistence/stats";
+import { speak } from "../audio/speech";
 
 type View = "practice" | "strategy" | "stats" | "settings";
 
@@ -15,19 +26,58 @@ export function App() {
   const [activeView, setActiveView] = useState<View>("practice");
   const [rules, setRules] = useState<TableRules>(defaultRules);
   const [round, setRound] = useState(() => createInitialRound(defaultRules));
-  const stats = useMemo(() => createEmptyStats(rules), [rules]);
+  const [stats, setStats] = useState<SessionStats>(() => {
+    const initialStats = loadStats(defaultRules);
+    return round.status === "settled" ? tallySettledRound(initialStats, round) : initialStats;
+  });
+  const [feedback, setFeedback] = useState<ActionEvaluation | null>(null);
+  const [audioEnabled, setAudioEnabled] = useState(true);
+
+  function updateStats(updater: (current: SessionStats) => SessionStats) {
+    setStats((current) => {
+      const updated = updater(current);
+      saveStats(updated);
+      return updated;
+    });
+  }
 
   function handleRulesChange(nextRules: TableRules) {
     setRules(nextRules);
-    setRound(createInitialRound(nextRules));
+    setStats(loadStats(nextRules));
+    setFeedback(null);
+    const newRound = createInitialRound(nextRules);
+    setRound(newRound);
+    if (newRound.status === "settled") {
+      updateStats((current) => tallySettledRound(current, newRound));
+    }
   }
 
   function handleAction(action: PlayerAction) {
-    setRound((currentRound) => applyPlayerAction(currentRound, action, rules));
+    const evaluation = evaluateAction(round, action, rules);
+    const wasPlaying = round.status !== "settled";
+    const nextRound = applyPlayerAction(round, action, rules);
+    setRound(nextRound);
+    setFeedback(evaluation);
+
+    if (evaluation) {
+      updateStats((current) => recordDecision(current, evaluation.wasCorrect));
+      speak(evaluation.wasCorrect ? "Correct." : `Incorrect. Basic strategy says ${actionLabels[evaluation.recommendedAction]}.`, audioEnabled);
+    }
+
+    if (wasPlaying && nextRound.status === "settled") {
+      updateStats((current) => tallySettledRound(current, nextRound));
+      speak(nextRound.message, audioEnabled);
+    }
   }
 
   function dealNextRound() {
-    setRound(createInitialRound(rules));
+    const newRound = createInitialRound(rules, nextShoeFor(round, rules));
+    setRound(newRound);
+    setFeedback(null);
+    if (newRound.status === "settled") {
+      updateStats((current) => tallySettledRound(current, newRound));
+      speak(newRound.message, audioEnabled);
+    }
   }
 
   return (
@@ -61,20 +111,44 @@ export function App() {
                 <p className="label">Dealer</p>
                 <HandView hand={round.dealerHand} revealHoleCard={round.status === "settled"} />
               </div>
-              <button className="icon-button" aria-label="Audio enabled">
-                <Volume2 size={18} />
+              <button
+                className="icon-button"
+                aria-label={audioEnabled ? "Disable audio" : "Enable audio"}
+                aria-pressed={audioEnabled}
+                onClick={() => setAudioEnabled((enabled) => !enabled)}
+              >
+                {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
               </button>
             </div>
 
-            <div>
-              <p className="label">Player</p>
-              <HandView hand={round.playerHands[0].cards} />
+            <div className="player-hands">
+              {round.playerHands.map((hand, index) => (
+                <div
+                  className={index === round.activeHandIndex && round.status === "playing" ? "player-hand active" : "player-hand"}
+                  key={index}
+                >
+                  <div className="hand-heading">
+                    <p className="label">Player hand {index + 1}</p>
+                    <span>${hand.bet}</span>
+                  </div>
+                  <HandView hand={hand.cards} />
+                  {hand.result && <p className="hand-result">{formatResult(hand.result)}</p>}
+                </div>
+              ))}
             </div>
 
             <p className="round-message">{round.message}</p>
 
+            {feedback && (
+              <p className={feedback.wasCorrect ? "decision-feedback correct" : "decision-feedback incorrect"}>
+                {feedback.wasCorrect
+                  ? "Correct play."
+                  : `Not quite — basic strategy says ${actionLabels[feedback.recommendedAction]}.`}
+              </p>
+            )}
+
             {round.status === "playing" ? (
-              <ActionButtons legalActions={round.playerHands[0].legalActions} onAction={handleAction} />
+              <ActionButtons legalActions={round.playerHands[round.activeHandIndex].legalActions} onAction={handleAction} />
             ) : (
               <button className="primary-button" onClick={dealNextRound}>
                 Deal next hand
@@ -89,6 +163,8 @@ export function App() {
               <dd>{rules.deckCount}</dd>
               <dt>Dealer soft 17</dt>
               <dd>{rules.dealerHitsSoft17 ? "Hits" : "Stands"}</dd>
+              <dt>Dealer peeks</dt>
+              <dd>{rules.dealerPeeksForBlackjack ? "Yes" : "No"}</dd>
               <dt>Surrender</dt>
               <dd>{rules.surrenderAllowed ? "Allowed" : "Off"}</dd>
               <dt>Double after split</dt>
@@ -103,4 +179,22 @@ export function App() {
       {activeView === "settings" && <SettingsPanel rules={rules} onChange={handleRulesChange} />}
     </main>
   );
+}
+
+function tallySettledRound(stats: SessionStats, settledRound: RoundState): SessionStats {
+  const bankrollDelta = settledRound.playerHands.reduce(
+    (total, hand) => total + payoutForResult(hand.result!, hand.bet),
+    0
+  );
+  return recordSettledRound(stats, bankrollDelta);
+}
+
+function formatResult(result: HandResult) {
+  return {
+    blackjack: "Blackjack",
+    loss: "Loss",
+    push: "Push",
+    surrender: "Surrender",
+    win: "Win"
+  }[result];
 }

@@ -27,7 +27,12 @@ export function isBlackjack(hand: Card[]) {
 }
 
 export function isSoftHand(hand: Card[]) {
-  return handValues(hand).some((value) => value <= 21 && value + 10 <= 21);
+  const hasAce = hand.some((card) => card.rank === "A");
+  if (!hasAce) return false;
+
+  const values = handValues(hand);
+  const hardTotal = values[0];
+  return bestHandValue(hand) > hardTotal;
 }
 
 export function canSplit(hand: Card[]) {

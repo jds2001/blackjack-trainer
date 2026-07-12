@@ -129,6 +129,41 @@ h2 {
   gap: 10px;
 }
 
+.player-hands {
+  display: grid;
+  gap: 14px;
+}
+
+.player-hand {
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 8px;
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.player-hand.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.72);
+}
+
+.hand-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.hand-heading span,
+.hand-result {
+  font-weight: 800;
+}
+
+.hand-heading .label,
+.hand-result {
+  margin: 0;
+}
+
 .cards {
   display: flex;
   flex-wrap: wrap;
@@ -136,22 +171,14 @@ h2 {
 }
 
 .playing-card {
-  align-items: center;
   background: #fff;
   border: 1px solid #d7ded4;
   border-radius: 8px;
   box-shadow: 0 12px 20px rgba(0, 0, 0, 0.12);
-  color: #111;
-  display: grid;
-  font-weight: 800;
+  display: block;
   height: 112px;
-  justify-items: center;
-  padding: 10px;
-  width: 78px;
-}
-
-.playing-card.red {
-  color: #a71922;
+  object-fit: contain;
+  width: 74px;
 }
 
 .playing-card.back {
@@ -166,6 +193,24 @@ h2 {
   font-size: 1.1rem;
   font-weight: 800;
   margin: 0;
+}
+
+.decision-feedback {
+  border-radius: 6px;
+  font-weight: 700;
+  margin: 0;
+  padding: 8px 12px;
+  width: fit-content;
+}
+
+.decision-feedback.correct {
+  background: #eafff1;
+  color: #1f7a3f;
+}
+
+.decision-feedback.incorrect {
+  background: #fdeceb;
+  color: #a71922;
 }
 
 .side-panel,

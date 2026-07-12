@@ -15,10 +15,20 @@ export type StrategyInput = {
   canSurrender: boolean;
 };
 
-export function strategyCodeToAction(code: StrategyCode): PlayerAction {
-  if (code === "S" || code === "Ds" || code === "Rs") return "stand";
-  if (code === "D") return "double";
+export function strategyCodeToAction(
+  code: StrategyCode,
+  input: Pick<StrategyInput, "canDouble" | "canSurrender">
+): PlayerAction {
+  if (code === "S") return "stand";
+  if (code === "Ds") return input.canDouble ? "double" : "stand";
+  if (code === "D") return input.canDouble ? "double" : "hit";
   if (code === "P") return "split";
-  if (code === "Rh") return "surrender";
+  if (code === "Rh") return input.canSurrender ? "surrender" : "hit";
+  if (code === "Rs") return input.canSurrender ? "surrender" : "stand";
   return "hit";
+}
+
+export function rankToDealerUpcard(rank: Rank): DealerUpcard {
+  if (rank === "J" || rank === "Q" || rank === "K") return "10";
+  return rank;
 }
