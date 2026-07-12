@@ -1,4 +1,5 @@
 import type { Card } from "./cards";
+import { dealDrillHand, pickDrillCategory, type DrillCategory, type DrillSettings } from "./drill";
 import { bestHandValue, canSplit, isBlackjack, isBust, isSoftHand } from "./hand";
 import type { PlayerAction, TableRules } from "./rules";
 import { settleHand, type Settlement } from "./settlement";
@@ -33,6 +34,7 @@ export type RoundState = {
   status: "playing" | "settled";
   result?: HandResult;
   message: string;
+  drillCategory?: DrillCategory;
 };
 
 export function nextShoeFor(round: RoundState, rules: TableRules): Shoe {
@@ -43,7 +45,30 @@ export function createInitialRound(rules: TableRules, previousShoe?: Shoe): Roun
   const shoe = cloneShoe(previousShoe ?? createShoe(rules.deckCount));
   const playerCards = [drawCard(shoe), drawCard(shoe)];
   const dealerHand = [drawCard(shoe), drawCard(shoe)];
+  return finalizeInitialDeal(rules, shoe, playerCards, dealerHand);
+}
 
+export function createDrillRound(rules: TableRules, drillSettings: DrillSettings): RoundState {
+  const category = pickDrillCategory(drillSettings, rules);
+  const drilled = category ? dealDrillHand(category, rules) : null;
+  const shoe = createShoe(rules.deckCount);
+
+  if (!drilled) {
+    const playerCards = [drawCard(shoe), drawCard(shoe)];
+    const dealerHand = [drawCard(shoe), drawCard(shoe)];
+    return finalizeInitialDeal(rules, shoe, playerCards, dealerHand);
+  }
+
+  return finalizeInitialDeal(rules, shoe, drilled.playerCards, drilled.dealerCards, category ?? undefined);
+}
+
+function finalizeInitialDeal(
+  rules: TableRules,
+  shoe: Shoe,
+  playerCards: Card[],
+  dealerHand: Card[],
+  drillCategory?: DrillCategory
+): RoundState {
   const round: RoundState = {
     shoe,
     dealerHand,
@@ -59,7 +84,8 @@ export function createInitialRound(rules: TableRules, previousShoe?: Shoe): Roun
       }
     ],
     status: "playing",
-    message: "Choose the best play."
+    message: "Choose the best play.",
+    drillCategory
   };
 
   if (rules.dealerPeeksForBlackjack && isBlackjack(dealerHand)) {

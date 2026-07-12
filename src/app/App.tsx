@@ -2,13 +2,16 @@ import { BookOpen, ChartNoAxesColumn, Settings, Volume2, VolumeX } from "lucide-
 import { useState } from "react";
 import { ActionButtons } from "../components/ActionButtons";
 import { actionLabels } from "../components/actionLabels";
+import { DrillSettingsPanel } from "../components/DrillSettingsPanel";
 import { HandView } from "../components/HandView";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { StatsPanel } from "../components/StatsPanel";
 import { StrategyTable } from "../components/StrategyTable";
 import type { Card } from "../game/cards";
+import { defaultDrillSettings, type DrillCategory, type DrillSettings } from "../game/drill";
 import {
   applyPlayerAction,
+  createDrillRound,
   createInitialRound,
   evaluateAction,
   nextShoeFor,
@@ -35,9 +38,17 @@ export function App() {
   const [feedback, setFeedback] = useState<ActionEvaluation | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [betAmount, setBetAmount] = useState(defaultRules.defaultBet);
+  const [drillSettings, setDrillSettings] = useState<DrillSettings>(defaultDrillSettings);
 
   function handleBetChange(value: number) {
     setBetAmount(clampBet(value, stats.bankroll));
+  }
+
+  function dealNewRound(effectiveRules: TableRules, previousRound: RoundState): RoundState {
+    const rulesWithBet = { ...effectiveRules, defaultBet: betAmount };
+    return drillSettings.enabled
+      ? createDrillRound(rulesWithBet, drillSettings)
+      : createInitialRound(rulesWithBet, nextShoeFor(previousRound, effectiveRules));
   }
 
   function updateStats(updater: (current: SessionStats) => SessionStats) {
@@ -52,7 +63,7 @@ export function App() {
     setRules(nextRules);
     setStats(loadStats(nextRules));
     setFeedback(null);
-    const newRound = createInitialRound({ ...nextRules, defaultBet: betAmount });
+    const newRound = dealNewRound(nextRules, round);
     setRound(newRound);
     if (newRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, newRound));
@@ -95,7 +106,7 @@ export function App() {
   }
 
   function dealNextRound() {
-    const newRound = createInitialRound({ ...rules, defaultBet: betAmount }, nextShoeFor(round, rules));
+    const newRound = dealNewRound(rules, round);
     setRound(newRound);
     setFeedback(null);
     if (newRound.status === "settled") {
@@ -171,6 +182,8 @@ export function App() {
 
             <p className="round-message">{round.message}</p>
 
+            {round.drillCategory && <p className="drill-badge">Drilling: {drillCategoryLabel(round.drillCategory)}</p>}
+
             {feedback && (
               <p className={feedback.wasCorrect ? "decision-feedback correct" : "decision-feedback incorrect"}>
                 {feedback.wasCorrect
@@ -220,7 +233,12 @@ export function App() {
 
       {activeView === "strategy" && <StrategyTable rules={rules} />}
       {activeView === "stats" && <StatsPanel stats={stats} />}
-      {activeView === "settings" && <SettingsPanel rules={rules} onChange={handleRulesChange} />}
+      {activeView === "settings" && (
+        <>
+          <SettingsPanel rules={rules} onChange={handleRulesChange} />
+          <DrillSettingsPanel drillSettings={drillSettings} rules={rules} onChange={setDrillSettings} />
+        </>
+      )}
     </main>
   );
 }
@@ -242,6 +260,14 @@ function tallySettledRound(stats: SessionStats, settledRound: RoundState): Sessi
     0
   );
   return recordSettledRound(stats, bankrollDelta);
+}
+
+function drillCategoryLabel(category: DrillCategory) {
+  return {
+    soft: "soft hands",
+    pair: "pairs",
+    surrender: "surrender-eligible hands"
+  }[category];
 }
 
 function formatResult(result: HandResult) {

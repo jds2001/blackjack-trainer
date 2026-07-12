@@ -255,6 +255,16 @@ h2 {
   color: #a71922;
 }
 
+.drill-badge {
+  background: #fff6df;
+  border-radius: 6px;
+  color: #7a5b1f;
+  font-weight: 700;
+  margin: 0;
+  padding: 6px 12px;
+  width: fit-content;
+}
+
 .side-panel,
 .panel {
   background: #fff;
@@ -329,7 +339,42 @@ dd {
 
 .toggle-row {
   align-items: center;
+  display: flex;
+  gap: 8px;
   grid-template-columns: auto 1fr;
+}
+
+.drill-description {
+  color: #5d6b5f;
+  margin: 0 0 14px;
+  max-width: 60ch;
+}
+
+.drill-weights {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.drill-weight-row {
+  align-items: center;
+  display: flex;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.drill-weight-row input {
+  border: 1px solid #cdd8c9;
+  border-radius: 6px;
+  min-height: 36px;
+  padding: 0 8px;
+  width: 70px;
+}
+
+.drill-weight-note {
+  color: #5d6b5f;
+  font-size: 0.8rem;
+  font-weight: 400;
 }
 
 .stat-card {
