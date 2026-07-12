@@ -6,6 +6,7 @@ import { HandView } from "../components/HandView";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { StatsPanel } from "../components/StatsPanel";
 import { StrategyTable } from "../components/StrategyTable";
+import type { Card } from "../game/cards";
 import {
   applyPlayerAction,
   createInitialRound,
@@ -16,6 +17,7 @@ import {
   type HandResult,
   type RoundState
 } from "../game/engine";
+import { bestHandValue, isSoftHand } from "../game/hand";
 import { defaultRules, type PlayerAction, type TableRules } from "../game/rules";
 import { loadStats, recordDecision, recordSettledRound, saveStats, type SessionStats } from "../persistence/stats";
 import { speak } from "../audio/speech";
@@ -49,6 +51,9 @@ export function App() {
     setRound(newRound);
     if (newRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, newRound));
+      speak(newRound.message, audioEnabled);
+    } else {
+      speak(announceHandTotal(newRound.playerHands[0].cards), audioEnabled);
     }
   }
 
@@ -61,12 +66,26 @@ export function App() {
 
     if (evaluation) {
       updateStats((current) => recordDecision(current, evaluation.wasCorrect));
-      speak(evaluation.wasCorrect ? "Correct." : `Incorrect. Basic strategy says ${actionLabels[evaluation.recommendedAction]}.`, audioEnabled);
     }
-
     if (wasPlaying && nextRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, nextRound));
-      speak(nextRound.message, audioEnabled);
+    }
+
+    const speechParts: string[] = [];
+    if (action === "hit" || action === "double" || action === "split") {
+      const actedHand = nextRound.playerHands[round.activeHandIndex];
+      if (actedHand) {
+        speechParts.push(announceHandTotal(actedHand.cards));
+      }
+    }
+    if (evaluation) {
+      speechParts.push(evaluation.wasCorrect ? "Correct." : `Incorrect. Basic strategy says ${actionLabels[evaluation.recommendedAction]}.`);
+    }
+    if (wasPlaying && nextRound.status === "settled") {
+      speechParts.push(nextRound.message);
+    }
+    if (speechParts.length > 0) {
+      speak(speechParts.join(" "), audioEnabled);
     }
   }
 
@@ -77,6 +96,8 @@ export function App() {
     if (newRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, newRound));
       speak(newRound.message, audioEnabled);
+    } else {
+      speak(announceHandTotal(newRound.playerHands[0].cards), audioEnabled);
     }
   }
 
@@ -179,6 +200,11 @@ export function App() {
       {activeView === "settings" && <SettingsPanel rules={rules} onChange={handleRulesChange} />}
     </main>
   );
+}
+
+function announceHandTotal(cards: Card[]): string {
+  const total = bestHandValue(cards);
+  return isSoftHand(cards) ? `Soft ${total}.` : `${total}.`;
 }
 
 function tallySettledRound(stats: SessionStats, settledRound: RoundState): SessionStats {
