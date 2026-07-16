@@ -5,11 +5,14 @@ import { bestHandValue, isSoftHand } from "../game/hand";
 type HandViewProps = {
   hand: Card[];
   revealHoleCard?: boolean;
+  /** Limits how many cards from `hand` are shown, for animating cards in one at a time. Defaults to the full hand. */
+  revealCount?: number;
 };
 
-export function HandView({ hand, revealHoleCard = true }: HandViewProps) {
-  const visibleCards = revealHoleCard ? hand : hand.slice(0, 1);
-  const hiddenCount = revealHoleCard ? 0 : Math.max(hand.length - 1, 0);
+export function HandView({ hand, revealHoleCard = true, revealCount }: HandViewProps) {
+  const revealedHand = revealCount === undefined ? hand : hand.slice(0, revealCount);
+  const visibleCards = revealHoleCard ? revealedHand : revealedHand.slice(0, 1);
+  const hiddenCount = revealHoleCard ? 0 : Math.max(revealedHand.length - 1, 0);
 
   return (
     <div className="hand">
@@ -23,8 +26,8 @@ export function HandView({ hand, revealHoleCard = true }: HandViewProps) {
       </div>
       {revealHoleCard && (
         <p className="hand-total">
-          {bestHandValue(hand)}
-          {isSoftHand(hand) ? " soft" : ""}
+          {bestHandValue(revealedHand)}
+          {isSoftHand(revealedHand) ? " soft" : ""}
         </p>
       )}
     </div>

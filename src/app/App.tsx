@@ -1,5 +1,5 @@
 import { BookOpen, ChartNoAxesColumn, Settings, Volume2, VolumeX } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ActionButtons } from "../components/ActionButtons";
 import { actionLabels } from "../components/actionLabels";
 import { DrillSettingsPanel } from "../components/DrillSettingsPanel";
@@ -27,6 +27,8 @@ import { speak } from "../audio/speech";
 
 type View = "practice" | "strategy" | "stats" | "settings";
 
+const DEALER_CARD_DELAY_MS = 700;
+
 export function App() {
   const [activeView, setActiveView] = useState<View>("practice");
   const [rules, setRules] = useState<TableRules>(defaultRules);
@@ -39,6 +41,44 @@ export function App() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [betAmount, setBetAmount] = useState(defaultRules.defaultBet);
   const [drillSettings, setDrillSettings] = useState<DrillSettings>(defaultDrillSettings);
+  const [dealerRevealCount, setDealerRevealCount] = useState(round.dealerHand.length);
+  const [pendingResultSpeech, setPendingResultSpeech] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (round.status !== "settled") {
+      setDealerRevealCount(round.dealerHand.length);
+      return;
+    }
+
+    const finalCount = round.dealerHand.length;
+    const startCount = Math.min(2, finalCount);
+    setDealerRevealCount(startCount);
+    if (finalCount <= startCount) return;
+
+    let revealed = startCount;
+    const timeouts: number[] = [];
+    const revealNextCard = () => {
+      timeouts.push(
+        window.setTimeout(() => {
+          revealed += 1;
+          setDealerRevealCount(revealed);
+          if (revealed < finalCount) revealNextCard();
+        }, DEALER_CARD_DELAY_MS)
+      );
+    };
+    revealNextCard();
+
+    return () => timeouts.forEach((id) => window.clearTimeout(id));
+  }, [round]);
+
+  const dealerRevealComplete = dealerRevealCount >= round.dealerHand.length;
+
+  useEffect(() => {
+    if (pendingResultSpeech && dealerRevealComplete) {
+      speak(pendingResultSpeech, audioEnabled);
+      setPendingResultSpeech(null);
+    }
+  }, [pendingResultSpeech, dealerRevealComplete, audioEnabled]);
 
   function handleBetChange(value: number) {
     setBetAmount(clampBet(value, stats.bankroll));
@@ -98,7 +138,7 @@ export function App() {
       speechParts.push(evaluation.wasCorrect ? "Correct." : `Incorrect. Basic strategy says ${actionLabels[evaluation.recommendedAction]}.`);
     }
     if (wasPlaying && nextRound.status === "settled") {
-      speechParts.push(nextRound.message);
+      setPendingResultSpeech(nextRound.message);
     }
     if (speechParts.length > 0) {
       speak(speechParts.join(" "), audioEnabled);
@@ -146,7 +186,11 @@ export function App() {
             <div className="table-header">
               <div>
                 <p className="label">Dealer</p>
-                <HandView hand={round.dealerHand} revealHoleCard={round.status === "settled"} />
+                <HandView
+                  hand={round.dealerHand}
+                  revealHoleCard={round.status === "settled"}
+                  revealCount={dealerRevealCount}
+                />
               </div>
               <div className="table-header-controls">
                 <p className="bankroll-display">
@@ -175,12 +219,14 @@ export function App() {
                     <span>${hand.bet}</span>
                   </div>
                   <HandView hand={hand.cards} />
-                  {hand.result && <p className="hand-result">{formatResult(hand.result)}</p>}
+                  {hand.result && dealerRevealComplete && <p className="hand-result">{formatResult(hand.result)}</p>}
                 </div>
               ))}
             </div>
 
-            <p className="round-message">{round.message}</p>
+            <p className="round-message">
+              {round.status === "playing" || dealerRevealComplete ? round.message : "Dealer is playing…"}
+            </p>
 
             {round.drillCategory && <p className="drill-badge">Drilling: {drillCategoryLabel(round.drillCategory)}</p>}
 
@@ -194,7 +240,7 @@ export function App() {
 
             {round.status === "playing" ? (
               <ActionButtons legalActions={round.playerHands[round.activeHandIndex].legalActions} onAction={handleAction} />
-            ) : (
+            ) : dealerRevealComplete ? (
               <div className="deal-row">
                 <label className="bet-control">
                   Next bet
@@ -210,7 +256,7 @@ export function App() {
                   Deal next hand
                 </button>
               </div>
-            )}
+            ) : null}
           </div>
 
           <aside className="side-panel">
