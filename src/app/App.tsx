@@ -4,8 +4,11 @@ import { ActionButtons } from "../components/ActionButtons";
 import { actionLabels } from "../components/actionLabels";
 import { DrillSettingsPanel } from "../components/DrillSettingsPanel";
 import { HandView } from "../components/HandView";
+import { PracticeSidebar } from "../components/PracticeSidebar";
 import { SettingsPanel } from "../components/SettingsPanel";
 import { StatsPanel } from "../components/StatsPanel";
+import { StrategyChartDrawer } from "../components/StrategyChartDrawer";
+import { StrategyHelpSettingsPanel } from "../components/StrategyHelpSettingsPanel";
 import { StrategyTable } from "../components/StrategyTable";
 import type { Card } from "../game/cards";
 import { defaultDrillSettings, type DrillCategory, type DrillSettings } from "../game/drill";
@@ -22,7 +25,9 @@ import {
 } from "../game/engine";
 import { bestHandValue, isSoftHand } from "../game/hand";
 import { defaultRules, type PlayerAction, type TableRules } from "../game/rules";
+import { loadPreferences, savePreferences, type StrategyHelpMode } from "../persistence/preferences";
 import { loadStats, recordDecision, recordSettledRound, saveStats, type SessionStats } from "../persistence/stats";
+import type { StrategyTarget } from "../strategy/strategyLabels";
 import { speak } from "../audio/speech";
 
 type View = "practice" | "strategy" | "stats" | "settings";
@@ -43,6 +48,9 @@ export function App() {
   const [drillSettings, setDrillSettings] = useState<DrillSettings>(defaultDrillSettings);
   const [dealerRevealCount, setDealerRevealCount] = useState(round.dealerHand.length);
   const [pendingResultSpeech, setPendingResultSpeech] = useState<string | null>(null);
+  const [strategyHelpMode, setStrategyHelpMode] = useState<StrategyHelpMode>(() => loadPreferences().strategyHelpMode);
+  const [chartOpen, setChartOpen] = useState(false);
+  const [chartTarget, setChartTarget] = useState<StrategyTarget | null>(null);
 
   useEffect(() => {
     if (round.status !== "settled") {
@@ -84,6 +92,16 @@ export function App() {
     setBetAmount(clampBet(value, stats.bankroll));
   }
 
+  function handleStrategyHelpModeChange(mode: StrategyHelpMode) {
+    setStrategyHelpMode(mode);
+    savePreferences({ strategyHelpMode: mode });
+  }
+
+  function openStrategyChart(target: StrategyTarget | null) {
+    setChartTarget(target);
+    setChartOpen(true);
+  }
+
   function dealNewRound(effectiveRules: TableRules, previousRound: RoundState): RoundState {
     const rulesWithBet = { ...effectiveRules, defaultBet: betAmount };
     return drillSettings.enabled
@@ -103,14 +121,6 @@ export function App() {
     setRules(nextRules);
     setStats(loadStats(nextRules));
     setFeedback(null);
-    const newRound = dealNewRound(nextRules, round);
-    setRound(newRound);
-    if (newRound.status === "settled") {
-      updateStats((current) => tallySettledRound(current, newRound));
-      speak(newRound.message, audioEnabled);
-    } else {
-      speak(announceHandTotal(newRound.playerHands[0].cards), audioEnabled);
-    }
   }
 
   function handleAction(action: PlayerAction) {
@@ -259,21 +269,14 @@ export function App() {
             ) : null}
           </div>
 
-          <aside className="side-panel">
-            <h2>Current rules</h2>
-            <dl>
-              <dt>Decks</dt>
-              <dd>{rules.deckCount}</dd>
-              <dt>Dealer soft 17</dt>
-              <dd>{rules.dealerHitsSoft17 ? "Hits" : "Stands"}</dd>
-              <dt>Dealer peeks</dt>
-              <dd>{rules.dealerPeeksForBlackjack ? "Yes" : "No"}</dd>
-              <dt>Surrender</dt>
-              <dd>{rules.surrenderAllowed ? "Allowed" : "Off"}</dd>
-              <dt>Double after split</dt>
-              <dd>{rules.doubleAfterSplit ? "Allowed" : "Off"}</dd>
-            </dl>
-          </aside>
+          <PracticeSidebar
+            round={round}
+            rules={rules}
+            feedback={feedback}
+            strategyHelpMode={strategyHelpMode}
+            dealerRevealComplete={dealerRevealComplete}
+            onOpenChart={openStrategyChart}
+          />
         </section>
       )}
 
@@ -283,8 +286,11 @@ export function App() {
         <>
           <SettingsPanel rules={rules} onChange={handleRulesChange} />
           <DrillSettingsPanel drillSettings={drillSettings} rules={rules} onChange={setDrillSettings} />
+          <StrategyHelpSettingsPanel value={strategyHelpMode} onChange={handleStrategyHelpModeChange} />
         </>
       )}
+
+      <StrategyChartDrawer open={chartOpen} onClose={() => setChartOpen(false)} rules={rules} target={chartTarget} />
     </main>
   );
 }

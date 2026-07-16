@@ -5,14 +5,21 @@ import type { PlayerAction, TableRules } from "./rules";
 import { settleHand, type Settlement } from "./settlement";
 import { createShoe, drawCard, shouldReshuffle, type Shoe } from "./shoe";
 import { getBasicStrategy } from "../strategy/basicStrategy";
-import { rankToDealerUpcard, strategyCodeToAction, type StrategyInput } from "../strategy/strategyTypes";
+import { rankToDealerUpcard, strategyCodeToAction, type StrategyCode, type StrategyInput } from "../strategy/strategyTypes";
 
 export type HandResult = Settlement | "surrender";
 
-export type ActionEvaluation = {
+export type StrategyPreview = {
   handIndex: number;
-  playerAction: PlayerAction;
+  input: StrategyInput;
+  code: StrategyCode;
   recommendedAction: PlayerAction;
+  /** Identifies the exact cards this decision was made on, since a hand's classification (total/pair) can repeat across draws — e.g. resplitting into another pair of 8s. */
+  cards: Card[];
+};
+
+export type ActionEvaluation = StrategyPreview & {
+  playerAction: PlayerAction;
   wasCorrect: boolean;
 };
 
@@ -132,25 +139,39 @@ export function legalActionsForHand(
   return actions;
 }
 
-export function evaluateAction(round: RoundState, action: PlayerAction, rules: TableRules): ActionEvaluation | null {
+/**
+ * Derives the recommendation for whatever decision is currently pending, without regard to any
+ * particular action the player might take. Returns null when there's no decision to make right now
+ * (round settled, or the active hand has no legal actions).
+ */
+export function previewActiveHandStrategy(round: RoundState, rules: TableRules): StrategyPreview | null {
   if (round.status === "settled") return null;
 
   const activeHand = round.playerHands[round.activeHandIndex];
-  if (!activeHand.legalActions.includes(action)) return null;
+  if (!activeHand || activeHand.legalActions.length === 0) return null;
 
   const input = buildStrategyInput(activeHand, round.dealerHand[0]);
   const code = getBasicStrategy(input, rules);
   const recommendedAction = strategyCodeToAction(code, input);
 
+  return { handIndex: round.activeHandIndex, input, code, recommendedAction, cards: activeHand.cards };
+}
+
+export function evaluateAction(round: RoundState, action: PlayerAction, rules: TableRules): ActionEvaluation | null {
+  const activeHand = round.playerHands[round.activeHandIndex];
+  if (round.status === "settled" || !activeHand?.legalActions.includes(action)) return null;
+
+  const preview = previewActiveHandStrategy(round, rules);
+  if (!preview) return null;
+
   return {
-    handIndex: round.activeHandIndex,
+    ...preview,
     playerAction: action,
-    recommendedAction,
-    wasCorrect: recommendedAction === action
+    wasCorrect: preview.recommendedAction === action
   };
 }
 
-function buildStrategyInput(hand: PlayerHandState, dealerUpcard: Card): StrategyInput {
+export function buildStrategyInput(hand: PlayerHandState, dealerUpcard: Card): StrategyInput {
   const isPair = hand.cards.length === 2 && canSplit(hand.cards);
   return {
     playerTotal: bestHandValue(hand.cards),

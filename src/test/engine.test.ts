@@ -1,6 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "../game/cards";
-import { applyPlayerAction, createInitialRound, evaluateAction, nextShoeFor, payoutForResult, type RoundState } from "../game/engine";
+import {
+  applyPlayerAction,
+  createInitialRound,
+  evaluateAction,
+  nextShoeFor,
+  payoutForResult,
+  previewActiveHandStrategy,
+  type RoundState
+} from "../game/engine";
 import { defaultRules } from "../game/rules";
 import * as shoeModule from "../game/shoe";
 
@@ -210,6 +218,122 @@ describe("evaluateAction", () => {
   it("returns null for an action that isn't currently legal", () => {
     const settledRound: RoundState = { ...round, status: "settled" };
     expect(evaluateAction(settledRound, "hit", defaultRules)).toBeNull();
+  });
+});
+
+describe("previewActiveHandStrategy", () => {
+  it("returns the recommendation for the pending decision", () => {
+    const round: RoundState = {
+      shoe: { cards: [], penetration: 0.75 },
+      dealerHand: [card("10", "spades"), card("6", "hearts")],
+      playerHands: [
+        {
+          cards: [card("K", "clubs"), card("6", "clubs")],
+          bet: 25,
+          legalActions: ["hit", "stand", "double", "surrender"],
+          hasActed: false,
+          isSurrendered: false,
+          isSplitHand: false
+        }
+      ],
+      activeHandIndex: 0,
+      status: "playing",
+      message: "Choose the best play."
+    };
+
+    const preview = previewActiveHandStrategy(round, defaultRules);
+
+    expect(preview).not.toBeNull();
+    expect(preview!.handIndex).toBe(0);
+    expect(preview!.input.playerTotal).toBe(16);
+    expect(preview!.input.isSoft).toBe(false);
+    expect(preview!.code).toBe("Rh");
+    expect(preview!.recommendedAction).toBe("surrender");
+  });
+
+  it("returns null once the round is settled", () => {
+    const round: RoundState = {
+      shoe: { cards: [], penetration: 0.75 },
+      dealerHand: [card("10", "spades"), card("6", "hearts")],
+      playerHands: [
+        {
+          cards: [card("K", "clubs"), card("6", "clubs")],
+          bet: 25,
+          legalActions: [],
+          hasActed: true,
+          isSurrendered: false,
+          isSplitHand: false,
+          result: "loss"
+        }
+      ],
+      activeHandIndex: 0,
+      status: "settled",
+      message: "Dealer wins."
+    };
+
+    expect(previewActiveHandStrategy(round, defaultRules)).toBeNull();
+  });
+
+  it("returns null when the active hand has no legal actions, even mid-round", () => {
+    const round: RoundState = {
+      shoe: { cards: [], penetration: 0.75 },
+      dealerHand: [card("10", "spades"), card("6", "hearts")],
+      playerHands: [
+        {
+          cards: [card("K", "clubs"), card("6", "clubs"), card("K", "hearts")],
+          bet: 25,
+          legalActions: [],
+          hasActed: true,
+          isSurrendered: false,
+          isSplitHand: false,
+          result: "loss"
+        },
+        {
+          cards: [card("8", "spades"), card("8", "clubs")],
+          bet: 25,
+          legalActions: ["hit", "stand", "double", "split"],
+          hasActed: false,
+          isSurrendered: false,
+          isSplitHand: true
+        }
+      ],
+      activeHandIndex: 0,
+      status: "playing",
+      message: "Player busts. Play hand 2."
+    };
+
+    expect(previewActiveHandStrategy(round, defaultRules)).toBeNull();
+  });
+
+  it("follows the active hand across a split", () => {
+    const round: RoundState = {
+      shoe: {
+        cards: [card("5", "clubs"), card("6", "hearts")],
+        penetration: 0.75
+      },
+      dealerHand: [card("10", "spades"), card("7", "diamonds")],
+      playerHands: [
+        {
+          cards: [card("8", "spades"), card("8", "clubs")],
+          bet: 25,
+          legalActions: ["hit", "stand", "double", "surrender", "split"],
+          hasActed: false,
+          isSurrendered: false,
+          isSplitHand: false
+        }
+      ],
+      activeHandIndex: 0,
+      status: "playing",
+      message: "Choose the best play."
+    };
+
+    const splitRound = applyPlayerAction(round, "split", defaultRules);
+    expect(previewActiveHandStrategy(splitRound, defaultRules)!.handIndex).toBe(0);
+
+    const secondHandRound = applyPlayerAction(splitRound, "stand", defaultRules);
+    const preview = previewActiveHandStrategy(secondHandRound, defaultRules);
+    expect(preview).not.toBeNull();
+    expect(preview!.handIndex).toBe(1);
   });
 });
 
