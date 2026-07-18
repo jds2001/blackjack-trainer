@@ -67,26 +67,50 @@ src/
 Infrastructure (Terraform) and card art live in a private companion repo,
 not here — see [Deployment](#deployment) and [Card art](#card-art) below.
 
-## Card art
+## A Word About the Card Images
 
-`src/assets/cards/` is where the app looks for 52 card PNGs
-(`src/assets/cards/README.md` documents the expected filenames). Those
-files are **not** in this repo: the deck currently in use is licensed from
-Adobe Stock under a Standard license, which does not permit redistributing
-the stand-alone image files, so they're gitignored here rather than
-committed.
+`src/assets/cards/` is where the app looks for 52 card PNGs (see that 
+folder's README for the expected filenames). You will not find them there. 
+This is intentional, not an oversight, and definitely not me forgetting to 
+`git add` something.
 
-The app runs without them — `CardView` falls back to a plain text
-placeholder (rank + suit symbol) for any card whose image is missing,
-with a console warning, rather than crashing. To see actual card faces
-locally:
+If you're playing the hosted version, you'll notice it has actual card 
+faces and looks like a real app. That's because the production build on 
+CloudFront serves the licensed PNGs just fine — using stock assets inside 
+a running app is exactly what an Adobe Stock Standard license is for. What 
+it is emphatically *not* for is me handing out the raw PNG files to anyone 
+with a `git clone` command, which is a distinct and much more annoying 
+restriction that I have chosen to respect rather than test in court.
 
-- If you're the maintainer: copy the PNGs from the private
+So: the deck currently in use is licensed from Adobe Stock under a 
+Standard license. Despite my best efforts at creative license-interpretation 
+("but they're not the *main* part of the app!"), it turns out redistributing 
+the stand-alone files isn't covered — a fact I confirmed by reading the 
+actual terms instead of vibing it, which I recommend as a general life 
+strategy. The PNGs are `.gitignore`'d here and staying that way, because I 
+would like this to remain a hobby project and not an educational anecdote 
+in someone's stock-photo-licensing webinar.
+
+The repo version doesn't fall over without them, though: `CardView` 
+gracefully falls back to a plain text placeholder (rank + suit symbol) for 
+any missing card image, with a console warning, instead of crashing. Clone 
+away — you'll just be playing blackjack with the visual flair of a 1997 
+teletext service until you sort out art assets.
+
+**To get real card faces locally:**
+
+* **Maintainer (hi, it's me):** copy the PNGs from the private 
   `blackjack-trainer-assets` repo into `src/assets/cards/`.
-- If you're a contributor: source your own deck (any public-domain or
-  permissively-licensed set works, e.g. the classic Byron Knoll SVG
-  playing-card set, rendered/exported to PNG) and drop 52 files into
-  `src/assets/cards/` using the naming scheme in that folder's README.
+* **Contributor:** source your own deck under a license that won't get 
+  either of us a strongly worded email from a company with more lawyers 
+  than you have friends — a public-domain or permissively licensed set 
+  works great (e.g. the classic Byron Knoll SVG playing-card set, exported 
+  to PNG). Drop all 52 files into `src/assets/cards/` using the naming 
+  scheme documented there.
+
+**Do not**, under any circumstances, ask me to just "throw the Adobe ones 
+in a zip real quick." I like this repo. I like my inbox even more, and I 
+would like it to remain free of cease-and-desist letters.
 
 ## Design Decisions
 
