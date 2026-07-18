@@ -6,3 +6,8 @@ dist/
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# Adobe Stock-licensed card art; not redistributable. See README.
+src/assets/cards/*
+!src/assets/cards/.gitkeep
+!src/assets/cards/README.md

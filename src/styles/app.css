@@ -239,6 +239,32 @@ h2 {
   background: repeating-linear-gradient(45deg, #173b72, #173b72 8px, #22539b 8px, #22539b 16px);
 }
 
+.playing-card.placeholder {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  font-weight: 800;
+  gap: 2px;
+  justify-content: center;
+  line-height: 1;
+}
+
+.playing-card.placeholder.red {
+  color: #c1272d;
+}
+
+.playing-card.placeholder.black {
+  color: #1a1a1a;
+}
+
+.playing-card-rank {
+  font-size: 1.5rem;
+}
+
+.playing-card-suit {
+  font-size: 1.5rem;
+}
+
 .hand-total {
   font-weight: 800;
 }

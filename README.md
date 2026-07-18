@@ -62,8 +62,31 @@ src/
   strategy/        Basic strategy lookup and table generation
   styles/          Application CSS
   test/            Unit tests
-terraform/         Static site deployment
 ```
+
+Infrastructure (Terraform) and card art live in a private companion repo,
+not here — see [Deployment](#deployment) and [Card art](#card-art) below.
+
+## Card art
+
+`src/assets/cards/` is where the app looks for 52 card PNGs
+(`src/assets/cards/README.md` documents the expected filenames). Those
+files are **not** in this repo: the deck currently in use is licensed from
+Adobe Stock under a Standard license, which does not permit redistributing
+the stand-alone image files, so they're gitignored here rather than
+committed.
+
+The app runs without them — `CardView` falls back to a plain text
+placeholder (rank + suit symbol) for any card whose image is missing,
+with a console warning, rather than crashing. To see actual card faces
+locally:
+
+- If you're the maintainer: copy the PNGs from the private
+  `blackjack-trainer-assets` repo into `src/assets/cards/`.
+- If you're a contributor: source your own deck (any public-domain or
+  permissively-licensed set works, e.g. the classic Byron Knoll SVG
+  playing-card set, rendered/exported to PNG) and drop 52 files into
+  `src/assets/cards/` using the naming scheme in that folder's README.
 
 ## Design Decisions
 
@@ -120,9 +143,13 @@ npm test
 
 ## Deployment
 
+Terraform config for the static-site hosting (S3 + CloudFront) lives in
+the private `blackjack-trainer-assets` repo, not here, since it's
+infra/deployment detail rather than application code. Build the app here,
+then apply Terraform from that repo:
+
 ```sh
 npm run build
-cd terraform
-terraform init
-terraform apply
+# in blackjack-trainer-assets:
+#   cd terraform && terraform init && terraform apply
 ```

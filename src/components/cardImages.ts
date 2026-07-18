@@ -28,11 +28,7 @@ const rankCode: Record<Card["rank"], string> = {
   K: "k"
 };
 
-export function cardImageUrl(card: Card): string {
+export function cardImageUrl(card: Card): string | undefined {
   const code = `${rankCode[card.rank]}${suitLetter[card.suit]}`;
-  const url = images[`../assets/cards/${code}.png`];
-  if (!url) {
-    throw new Error(`Missing card image for ${code}`);
-  }
-  return url;
+  return images[`../assets/cards/${code}.png`];
 }
