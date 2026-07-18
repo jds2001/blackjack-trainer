@@ -1,5 +1,5 @@
 import { BookOpen, ChartNoAxesColumn, Settings, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionButtons } from "../components/ActionButtons";
 import { actionLabels } from "../components/actionLabels";
 import { DrillSettingsPanel } from "../components/DrillSettingsPanel";
@@ -34,6 +34,15 @@ type View = "practice" | "strategy" | "stats" | "settings";
 
 const DEALER_CARD_DELAY_MS = 700;
 
+/**
+ * `speak()` calls `speechSynthesis.cancel()` before every utterance, so any two calls landing in
+ * the same render/commit race each other and can silently drop both. `immediate` and `deferred`
+ * are merged (never overwritten) by every producer and flushed as a single combined utterance
+ * whenever they're ready, so simultaneous producers can never fire the speech API twice.
+ */
+type PendingSpeech = { immediate: string | null; deferred: string | null };
+const noPendingSpeech: PendingSpeech = { immediate: null, deferred: null };
+
 export function App() {
   const [activeView, setActiveView] = useState<View>("practice");
   const [rules, setRules] = useState<TableRules>(defaultRules);
@@ -47,7 +56,7 @@ export function App() {
   const [betAmount, setBetAmount] = useState(defaultRules.defaultBet);
   const [drillSettings, setDrillSettings] = useState<DrillSettings>(defaultDrillSettings);
   const [dealerRevealCount, setDealerRevealCount] = useState(round.dealerHand.length);
-  const [pendingResultSpeech, setPendingResultSpeech] = useState<string | null>(null);
+  const [pendingSpeech, setPendingSpeech] = useState<PendingSpeech>(noPendingSpeech);
   const [strategyHelpMode, setStrategyHelpMode] = useState<StrategyHelpMode>(() => loadPreferences().strategyHelpMode);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartTarget, setChartTarget] = useState<StrategyTarget | null>(null);
@@ -81,12 +90,46 @@ export function App() {
 
   const dealerRevealComplete = dealerRevealCount >= round.dealerHand.length;
 
+  // The sole call site for the speech API: joins whichever parts are ready this render into one
+  // utterance. `deferred` parts wait for dealerRevealComplete; anything already ready when they're
+  // queued (e.g. a hand-ending action that leaves the dealer's hand unchanged) is spoken together.
   useEffect(() => {
-    if (pendingResultSpeech && dealerRevealComplete) {
-      speak(pendingResultSpeech, audioEnabled);
-      setPendingResultSpeech(null);
+    const parts: string[] = [];
+    if (pendingSpeech.immediate) parts.push(pendingSpeech.immediate);
+    if (pendingSpeech.deferred && dealerRevealComplete) parts.push(pendingSpeech.deferred);
+    if (parts.length === 0) return;
+
+    speak(parts.join(" "), audioEnabled);
+    setPendingSpeech((current) => ({
+      immediate: null,
+      deferred: dealerRevealComplete ? null : current.deferred
+    }));
+  }, [pendingSpeech, dealerRevealComplete, audioEnabled]);
+
+  function speakNow(text: string) {
+    setPendingSpeech((current) => ({ ...current, immediate: current.immediate ? `${current.immediate} ${text}` : text }));
+  }
+
+  function speakOnReveal(text: string) {
+    setPendingSpeech((current) => ({ ...current, deferred: current.deferred ? `${current.deferred} ${text}` : text }));
+  }
+
+  // The very first hand is dealt by the useState initializer above, not dealNextRound(), so it
+  // otherwise never gets announced. Runs once, on mount, mirroring dealNextRound()'s own announcement.
+  // The ref guard (not just an empty dep array) matters here: StrictMode double-invokes mount
+  // effects in development, and this one has no natural "undo" the way a subscribe/cleanup pair does.
+  const hasAnnouncedInitialDeal = useRef(false);
+  useEffect(() => {
+    if (hasAnnouncedInitialDeal.current) return;
+    hasAnnouncedInitialDeal.current = true;
+
+    if (round.status === "settled") {
+      speakOnReveal(round.message);
+    } else {
+      speakNow(announceHandTotal(round.playerHands[0].cards));
     }
-  }, [pendingResultSpeech, dealerRevealComplete, audioEnabled]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleBetChange(value: number) {
     setBetAmount(clampBet(value, stats.bankroll));
@@ -133,7 +176,9 @@ export function App() {
     if (evaluation) {
       updateStats((current) => recordDecision(current, evaluation.wasCorrect));
     }
-    if (wasPlaying && nextRound.status === "settled") {
+
+    const justSettled = wasPlaying && nextRound.status === "settled";
+    if (justSettled) {
       updateStats((current) => tallySettledRound(current, nextRound));
     }
 
@@ -147,11 +192,12 @@ export function App() {
     if (evaluation) {
       speechParts.push(evaluation.wasCorrect ? "Correct." : `Incorrect. Basic strategy says ${actionLabels[evaluation.recommendedAction]}.`);
     }
-    if (wasPlaying && nextRound.status === "settled") {
-      setPendingResultSpeech(nextRound.message);
-    }
     if (speechParts.length > 0) {
-      speak(speechParts.join(" "), audioEnabled);
+      speakNow(speechParts.join(" "));
+    }
+
+    if (justSettled) {
+      speakOnReveal(nextRound.message);
     }
   }
 
@@ -161,9 +207,9 @@ export function App() {
     setFeedback(null);
     if (newRound.status === "settled") {
       updateStats((current) => tallySettledRound(current, newRound));
-      speak(newRound.message, audioEnabled);
+      speakOnReveal(newRound.message);
     } else {
-      speak(announceHandTotal(newRound.playerHands[0].cards), audioEnabled);
+      speakNow(announceHandTotal(newRound.playerHands[0].cards));
     }
   }
 
@@ -287,6 +333,16 @@ export function App() {
           <SettingsPanel rules={rules} onChange={handleRulesChange} />
           <DrillSettingsPanel drillSettings={drillSettings} rules={rules} onChange={setDrillSettings} />
           <StrategyHelpSettingsPanel value={strategyHelpMode} onChange={handleStrategyHelpModeChange} />
+          <section className="panel">
+            <h2>Troubleshooting</h2>
+            <p className="drill-description">
+              If spoken feedback isn't working,{" "}
+              <a href={`${import.meta.env.BASE_URL}speech-test.html`} target="_blank" rel="noopener noreferrer">
+                open the speech diagnostics page
+              </a>{" "}
+              to check your browser's text-to-speech support independently of the app.
+            </p>
+          </section>
         </>
       )}
 

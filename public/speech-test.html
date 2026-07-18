@@ -1,0 +1,23 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Speech test</title></head>
+<body>
+  <button id="go">Speak</button>
+  <pre id="log"></pre>
+  <script>
+    const log = (msg) => { document.getElementById("log").textContent += msg + "\n"; console.log(msg); };
+    log("voices at load: " + speechSynthesis.getVoices().length);
+    speechSynthesis.onvoiceschanged = () => log("voiceschanged fired, voices: " + speechSynthesis.getVoices().length);
+
+    document.getElementById("go").addEventListener("click", () => {
+      speechSynthesis.cancel();
+      const u = new SpeechSynthesisUtterance("Testing one two three, hard sixteen, dealer wins.");
+      u.onstart = () => log("start");
+      u.onend = () => log("end");
+      u.onerror = (e) => log("error: " + e.error);
+      speechSynthesis.speak(u);
+      log("speak() called");
+    });
+  </script>
+</body>
+</html>
