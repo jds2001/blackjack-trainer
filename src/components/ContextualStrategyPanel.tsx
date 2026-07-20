@@ -38,6 +38,12 @@ export function ContextualStrategyPanel({
     <div className="strategy-panel">
       <p className="label">Strategy</p>
       {renderBody()}
+      {feedback && (answeredCurrentDecision || showSettledRecap) && (
+        <p className={feedback.wasCorrect ? "decision-feedback correct" : "decision-feedback incorrect"}>
+          You chose {actionFullLabel(feedback.playerAction)}. Correct play: {actionFullLabel(feedback.recommendedAction)}.{" "}
+          {feedback.wasCorrect ? "Correct!" : "Incorrect."}
+        </p>
+      )}
       <button className="strategy-chart-link" onClick={() => onOpenChart(target)}>
         View full chart
       </button>
@@ -57,7 +63,10 @@ export function ContextualStrategyPanel({
     const revealed = strategyHelpMode === "always" || answeredCurrentDecision || showSettledRecap;
 
     return (
-      <>
+      // Keyed on the decision itself so a new hit/split re-mounts this block and replays the
+      // entrance animation below — the dealer's upcard (and so the highlighted column) never
+      // moves within a hand, so without this the row updating in place reads as "nothing happened".
+      <div className="strategy-decision" key={decisionKey(displayed.handIndex, displayed.cards)}>
         {handLabel && <p className="strategy-hand-index">{handLabel}</p>}
         <p className="strategy-hand-line">
           {target.displayLabel} vs dealer {target.upcard}
@@ -66,19 +75,13 @@ export function ContextualStrategyPanel({
         {revealed ? (
           <>
             <p className="strategy-recommendation">{actionFullLabel(displayed.recommendedAction).toUpperCase()}</p>
-            {feedback && (answeredCurrentDecision || showSettledRecap) && (
-              <p className={feedback.wasCorrect ? "decision-feedback correct" : "decision-feedback incorrect"}>
-                You chose {actionFullLabel(feedback.playerAction)}. Correct play: {actionFullLabel(feedback.recommendedAction)}.{" "}
-                {feedback.wasCorrect ? "Correct!" : "Incorrect."}
-              </p>
-            )}
             <StrategyRow row={generateRowForHand(target.rowLabel, displayed.input, rules)} currentUpcard={target.upcard} />
             <Legend />
           </>
         ) : (
           <p className="strategy-hint">Choose an action to reveal the recommended play.</p>
         )}
-      </>
+      </div>
     );
   }
 

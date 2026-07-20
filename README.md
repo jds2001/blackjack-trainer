@@ -14,6 +14,7 @@ Build a blackjack trainer that runs primarily in the browser. The MVP is client-
   - dealer soft 17 rule: dealer hits soft 17 or stands on soft 17
   - surrender availability
   - double-after-split availability
+  - Dealer peeks mechancis
 - Deal realistic blackjack hands from a finite shoe based on the selected deck count.
 - Reshuffle when the shoe reaches a configurable penetration threshold.
 - Play hands to completion, including dealer play and bankroll settlement.
@@ -67,7 +68,10 @@ src/
 Infrastructure (Terraform) and card art live in a private companion repo,
 not here — see [Deployment](#deployment) and [Card art](#card-art) below.
 
-## A Word About the Card Images
+## Card Art
+
+The card art currently in use in the hosted version is licensed from Adobe
+Stock (asset ID 675688801 if you're curious) under a standard license.
 
 `src/assets/cards/` is where the app looks for 52 card PNGs (see that 
 folder's README for the expected filenames). You will not find them there. 
@@ -82,8 +86,7 @@ it is emphatically *not* for is me handing out the raw PNG files to anyone
 with a `git clone` command, which is a distinct and much more annoying 
 restriction that I have chosen to respect rather than test in court.
 
-So: the deck currently in use is licensed from Adobe Stock under a 
-Standard license. Despite my best efforts at creative license-interpretation 
+Despite my best efforts at creative license-interpretation 
 ("but they're not the *main* part of the app!"), it turns out redistributing 
 the stand-alone files isn't covered — a fact I confirmed by reading the 
 actual terms instead of vibing it, which I recommend as a general life 
@@ -101,6 +104,7 @@ teletext service until you sort out art assets.
 
 * **Maintainer (hi, it's me):** copy the PNGs from the private 
   `blackjack-trainer-assets` repo into `src/assets/cards/`.
+  The CodePipeline CI takes care of this.
 * **Contributor:** source your own deck under a license that won't get 
   either of us a strongly worded email from a company with more lawyers 
   than you have friends — a public-domain or permissively licensed set 
@@ -177,3 +181,8 @@ npm run build
 # in blackjack-trainer-assets:
 #   cd terraform && terraform init && terraform apply
 ```
+
+That Terraform will create a CI pipeline using CodePipeline and CodeBuild,
+the Terraform is only the infrastructure (Route 53 zone, S3 bucket,
+CloudFront distribution, CodePipeline itself). The actual code deployment
+is handled by that pipeline.

@@ -54,6 +54,28 @@ describe("ContextualStrategyPanel — strategy help off", () => {
     expect(screen.queryByText("SURRENDER")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /view full chart/i })).toBeInTheDocument();
   });
+
+  it("still shows correctness feedback for the answered decision even though the recommendation stays hidden", () => {
+    const round = roundWithHand({});
+    const preview = previewActiveHandStrategy(round, defaultRules)!;
+    const feedback: ActionEvaluation = { ...preview, playerAction: "stand", wasCorrect: false };
+
+    render(
+      <ContextualStrategyPanel
+        round={round}
+        rules={defaultRules}
+        feedback={feedback}
+        strategyHelpMode="off"
+        dealerRevealComplete
+        onOpenChart={noop}
+      />
+    );
+
+    expect(screen.getByText(/strategy help is turned off/i)).toBeInTheDocument();
+    expect(screen.queryByText("SURRENDER")).not.toBeInTheDocument();
+    expect(screen.getByText(/you chose stand/i)).toBeInTheDocument();
+    expect(screen.getByText(/incorrect\./i)).toBeInTheDocument();
+  });
 });
 
 describe("ContextualStrategyPanel — after answer", () => {

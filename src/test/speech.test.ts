@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+function MockSpeechSynthesisUtterance(this: { text: string }, text: string) {
+  this.text = text;
+}
+
 function makeSpeechSynthesis(initialVoices: unknown[]) {
   let voices = initialVoices;
   let voicesChangedHandler: (() => void) | null = null;
@@ -25,7 +29,7 @@ function makeSpeechSynthesis(initialVoices: unknown[]) {
 beforeEach(() => {
   (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance = vi
     .fn()
-    .mockImplementation((text: string) => ({ text }));
+    .mockImplementation(MockSpeechSynthesisUtterance);
 });
 
 afterEach(() => {
