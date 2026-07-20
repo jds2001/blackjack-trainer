@@ -9,6 +9,10 @@ function card(rank: Card["rank"], suit: Card["suit"]): Card {
   return { rank, suit };
 }
 
+function MockSpeechSynthesisUtterance(this: { text: string }, text: string) {
+  this.text = text;
+}
+
 vi.mock("../persistence/storage", () => {
   const store = new Map<string, unknown>();
   return {
@@ -39,7 +43,7 @@ beforeEach(() => {
   };
   (window as unknown as { SpeechSynthesisUtterance: unknown }).SpeechSynthesisUtterance = vi
     .fn()
-    .mockImplementation((text: string) => ({ text }));
+    .mockImplementation(MockSpeechSynthesisUtterance);
 });
 
 afterEach(() => {

@@ -1,5 +1,5 @@
-import { BookOpen, ChartNoAxesColumn, Settings, Volume2, VolumeX } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { BookOpen, ChartNoAxesColumn, Moon, Settings, Sun, Volume2, VolumeX } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ActionButtons } from "../components/ActionButtons";
 import { actionLabels } from "../components/actionLabels";
 import { DrillSettingsPanel } from "../components/DrillSettingsPanel";
@@ -25,7 +25,7 @@ import {
 } from "../game/engine";
 import { bestHandValue, isSoftHand } from "../game/hand";
 import { defaultRules, type PlayerAction, type TableRules } from "../game/rules";
-import { loadPreferences, savePreferences, type StrategyHelpMode } from "../persistence/preferences";
+import { loadPreferences, savePreferences, type StrategyHelpMode, type Theme } from "../persistence/preferences";
 import { loadStats, recordDecision, recordSettledRound, saveStats, type SessionStats } from "../persistence/stats";
 import type { StrategyTarget } from "../strategy/strategyLabels";
 import { speak } from "../audio/speech";
@@ -58,8 +58,13 @@ export function App() {
   const [dealerRevealCount, setDealerRevealCount] = useState(round.dealerHand.length);
   const [pendingSpeech, setPendingSpeech] = useState<PendingSpeech>(noPendingSpeech);
   const [strategyHelpMode, setStrategyHelpMode] = useState<StrategyHelpMode>(() => loadPreferences().strategyHelpMode);
+  const [theme, setTheme] = useState<Theme>(() => loadPreferences().theme);
   const [chartOpen, setChartOpen] = useState(false);
   const [chartTarget, setChartTarget] = useState<StrategyTarget | null>(null);
+
+  useLayoutEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   useEffect(() => {
     if (round.status !== "settled") {
@@ -138,6 +143,12 @@ export function App() {
   function handleStrategyHelpModeChange(mode: StrategyHelpMode) {
     setStrategyHelpMode(mode);
     savePreferences({ strategyHelpMode: mode });
+  }
+
+  function handleThemeToggle() {
+    const nextTheme: Theme = theme === "dark" ? "light" : "dark";
+    setTheme(nextTheme);
+    savePreferences({ theme: nextTheme });
   }
 
   function openStrategyChart(target: StrategyTarget | null) {
@@ -261,6 +272,14 @@ export function App() {
                 >
                   {audioEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
                 </button>
+                <button
+                  className="icon-button"
+                  aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+                  aria-pressed={theme === "dark"}
+                  onClick={handleThemeToggle}
+                >
+                  {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+                </button>
               </div>
             </div>
 
@@ -285,14 +304,6 @@ export function App() {
             </p>
 
             {round.drillCategory && <p className="drill-badge">Drilling: {drillCategoryLabel(round.drillCategory)}</p>}
-
-            {feedback && (
-              <p className={feedback.wasCorrect ? "decision-feedback correct" : "decision-feedback incorrect"}>
-                {feedback.wasCorrect
-                  ? "Correct play."
-                  : `Not quite — basic strategy says ${actionLabels[feedback.recommendedAction]}.`}
-              </p>
-            )}
 
             {round.status === "playing" ? (
               <ActionButtons legalActions={round.playerHands[round.activeHandIndex].legalActions} onAction={handleAction} />
